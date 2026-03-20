@@ -2,31 +2,58 @@ import { createContext, useContext, useMemo, useState } from "react";
 
 const AuthContext = createContext();
 
+const decodeJwtPayload = (token) => {
+    if (!token || typeof token !== "string") return null;
+
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    try {
+        const base64Url = parts[1];
+        const base64 = base64Url
+            .replace(/-/g, "+")
+            .replace(/_/g, "/")
+            .padEnd(Math.ceil(base64Url.length / 4) * 4, "=");
+
+        const jsonPayload = window.atob(base64);
+        const payload = JSON.parse(jsonPayload);
+
+        return payload && typeof payload === "object" ? payload : null;
+    } catch (error) {
+        console.error("Failed to decode token payload:", error);
+        return null;
+    }
+};
+
+const getRolesFromToken = (token) => {
+    const payload = decodeJwtPayload(token);
+    if (!payload) return [];
+
+    const roles = payload.roles;
+
+    if (Array.isArray(roles)) {
+        return roles.filter((role) => typeof role === "string");
+    }
+
+    if (typeof roles === "string") {
+        return [roles];
+    }
+
+    return [];
+};
+
 const AuthProvider = ({ children }) => {
     const [token, setToken_] = useState(localStorage.getItem("token"));
-
-    // Helper: Decodes the JWT payload to extract roles
-    const getRolesFromToken = (t) => {
-        if (!t) return [];
-        try {
-            const base64Url = t.split('.')[1];
-            const base64 = base64Url.replace('-', '+').replace('_', '/');
-            const payload = JSON.parse(window.atob(base64));
-            return payload.roles || [];
-        } catch (e) {
-            console.error("Failed to decode token", e);
-            return [];
-        }
-    };
 
     const roles = useMemo(() => getRolesFromToken(token), [token]);
 
     const setToken = (newToken) => {
-        setToken_(newToken);
-        if (newToken) {
+        if (newToken && typeof newToken === "string") {
             localStorage.setItem("token", newToken);
+            setToken_(newToken);
         } else {
             localStorage.removeItem("token");
+            setToken_(null);
         }
     };
 
